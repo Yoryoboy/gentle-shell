@@ -35,7 +35,7 @@ import { GentleAiDevBinaryOverrideError, resolveGentleAiDevBinaryOverride } from
 import { DOUBLE_ESC_CANCEL_HINT, floatPromptRow, framePromptLines, resolvePromptLayout, IDLE_ESC_CLEAR_HINT, PROMPT_HINT, PROMPT_STATE, SHELL_PULSE_WATCHDOG_MS, withPromptHint, type PromptState } from "../lib/shell-prompt.ts";
 import { oddPhaseRegistry } from "../lib/odd-phase.ts";
 import { inferOddPhase } from "../lib/odd-phase-inference.ts";
-import { isInteractiveMode } from "../lib/rpc-host.ts";
+import { isInteractiveMode, isInteractiveRpcHost } from "../lib/rpc-host.ts";
 import { gentlePiConfigHome } from "../lib/agent-home.ts";
 import { isNanAdaptiveReasoningModel } from "../lib/nan-provider.ts";
 import { resolveAnimationPolicy, writeAnimationPolicy, type AnimationPolicy } from "../lib/animation-policy.ts";
@@ -1382,6 +1382,8 @@ export function imageAttachmentsWidget(
 	};
 }
 
+const ODD_PHASE_STATUS_KEY = "gentle:odd-phase";
+
 // Stable across extension module reloads; never infer ownership from a name.
 const PROMPT_OWNER = Symbol.for("gentle-pi.prompt-owner");
 type PromptFactory = NonNullable<ReturnType<ExtensionContext["ui"]["getEditorComponent"]>> & { [PROMPT_OWNER]?: boolean };
@@ -2127,6 +2129,13 @@ export default function gentleShell(pi: ExtensionAPI, env: NodeJS.ProcessEnv = p
 		changes = undefined;
 		registry = new SessionWorktreeRegistry(pi, ctx.sessionManager, ctx.cwd, deps.resolveWorktree);
 		registry.start();
+		if (ctx.hasUI && isInteractiveRpcHost(ctx.mode)) {
+			// An RPC host never mounts the prompt, so the phase travels as a status it can show.
+			const sessionId = ctx.sessionManager.getSessionId();
+			oddPhaseRegistry.setRenderRequest(sessionId, () => {
+				try { ctx.ui.setStatus(ODD_PHASE_STATUS_KEY, oddPhaseRegistry.label(sessionId)); } catch { /* Display only. */ }
+			});
+		}
 		applyCardStyle();
 		applyCardContent();
 		if (!ctx.hasUI) return;
