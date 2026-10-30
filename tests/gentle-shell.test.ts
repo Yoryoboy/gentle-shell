@@ -1048,6 +1048,26 @@ test("reporting an ODD phase requests an immediate redraw even under the potato 
 	}
 });
 
+test("an interactive RPC host receives the ODD phase as an extension status", () => {
+	const previousHost = process.env.GENTLE_SHELL_INTERACTIVE_HOST;
+	process.env.GENTLE_SHELL_INTERACTIVE_HOST = "1";
+	const { pi, handlers } = fakePi();
+	gentleShell(pi, {});
+	const { ctx: base } = fakeContext();
+	const statuses: Array<[string, string | undefined]> = [];
+	const ctx = { ...base, mode: "rpc", ui: { ...base.ui, setStatus: (key: string, text: string | undefined) => { statuses.push([key, text]); } } } as ExtensionContext;
+	try {
+		for (const handler of handlers.get("session_start") ?? []) handler({}, ctx);
+		for (const handler of handlers.get("tool_execution_start") ?? []) handler({ toolName: "edit", args: { path: "a.ts" } }, ctx);
+		oddPhaseRegistry.clear(ctx.sessionManager.getSessionId());
+		assert.deepEqual(statuses.filter(([key]) => key === "gentle:odd-phase"), [["gentle:odd-phase", "implementing…"], ["gentle:odd-phase", undefined]]);
+	} finally {
+		for (const handler of handlers.get("session_shutdown") ?? []) handler({}, ctx);
+		if (previousHost === undefined) delete process.env.GENTLE_SHELL_INTERACTIVE_HOST;
+		else process.env.GENTLE_SHELL_INTERACTIVE_HOST = previousHost;
+	}
+});
+
 test("session_shutdown stops requesting redraws for a since-closed session", () => {
 	const { pi, handlers } = fakePi();
 	gentleShell(pi, {});
